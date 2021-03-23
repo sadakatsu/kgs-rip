@@ -44,8 +44,8 @@ def get_games(user: str, year: int, month: int) -> List[Game]:
         for row in root.xpath('/html/body/table[1]/tr[td]'):
             cells = row.xpath('td')
 
-            # Demonstration/review boards are not interesting.
-            if cells[-2] not in ('Review', 'Rengo') or len(cells) != 7:
+            # Reviews do not have all the cells.
+            if len(cells) != 7:
                 continue
 
             viewable = cells[0]
@@ -65,6 +65,11 @@ def get_games(user: str, year: int, month: int) -> List[Game]:
                 get_text(game_type),
                 get_text(results)
             )
+
+            # We do not want games that are not 19x19, are Reviews, or are Rengo.
+            if '9×9' in game.setup or game.game_type in ('Review', 'Rengo'):
+                continue
+
             print(game)
             games.append(game)
 
