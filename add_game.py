@@ -25,7 +25,7 @@ def add_game(connection: Connection, game: Game):
                 month = int(match.group('month'))
                 day = int(match.group('day'))
                 name = match.group('name')
-                filename = f'{year:0000d}-{month:00d}-{day:00d}_{name}.sgf'
+                filename = f'{year:04d}-{month:02d}-{day:02d}_{name}.sgf'
 
                 with open(f'games/{filename}', 'wb') as outfile:
                     outfile.write(sgf.content)

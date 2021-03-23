@@ -45,7 +45,7 @@ def get_games(user: str, year: int, month: int) -> List[Game]:
             cells = row.xpath('td')
 
             # Demonstration/review boards are not interesting.
-            if cells[-2] == 'Review' or len(cells) != 7:
+            if cells[-2] not in ('Review', 'Rengo') or len(cells) != 7:
                 continue
 
             viewable = cells[0]
