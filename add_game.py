@@ -31,8 +31,8 @@ def add_game(connection: Connection, game: Game):
                     outfile.write(sgf.content)
 
                 cursor.execute(
-                    'insert into games (id, white, black, start_time, type, result) values(?, ?, ?, ?, ?, ?)',
-                    [game.id, game.white, game.black, game.start_time, game.game_type, game.result]
+                    'insert into games (id, white, black, setup, start_time, type, result) values(?, ?, ?, ?, ?, ?)',
+                    [game.id, game.white, game.black, game.setup, game.start_time, game.game_type, game.result]
                 )
 
                 cursor.execute('select count(*) from games')
