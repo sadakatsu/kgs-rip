@@ -1,6 +1,7 @@
+import os
+import re
 import requests
 import sys
-import re
 
 from get_games import Game
 from sqlite3 import Connection
@@ -21,13 +22,31 @@ def add_game(connection: Connection, game: Game):
                     r'http://files.gokgs.com/games/(?P<year>\d+)/(?P<month>\d+)/(?P<day>\d+)/(?P<name>.*)\.sgf',
                     game.id
                 )
-                year = int(match.group('year'))
-                month = int(match.group('month'))
-                day = int(match.group('day'))
-                name = match.group('name')
-                filename = f'{year:04d}-{month:02d}-{day:02d}_{name}.sgf'
 
-                with open(f'games/{filename}', 'wb') as outfile:
+                year = int(match.group('year'))
+                year = f'{year:04d}'
+
+                month = int(match.group('month'))
+                month = f'{month:02d}'
+
+                day = int(match.group('day'))
+                day = f'{day:02d}'
+
+                name = match.group('name')
+
+                year_directory = f'games/{year}'
+                month_directory = f'{year_directory}/{month}'
+                day_directory = f'{month_directory}/{day}'
+                filename = f'{day_directory}/{year}-{month}-{day}_{name}.sgf'
+
+                if not os.path.isdir(year_directory):
+                    os.mkdir(year_directory)
+                if not os.path.isdir(month_directory):
+                    os.mkdir(month_directory)
+                if not os.path.isdir(day_directory):
+                    os.mkdir(day_directory)
+
+                with open(filename, 'wb') as outfile:
                     outfile.write(sgf.content)
 
                 cursor.execute(
