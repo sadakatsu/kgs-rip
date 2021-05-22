@@ -70,8 +70,9 @@ def get_games(user: str, year: int, month: int) -> List[Game]:
             if '19' not in game.setup or game.game_type in ('Review', 'Rengo'):
                 continue
 
-            print(game)
             games.append(game)
+
+    print(f'Found {len(games)} games.')
 
     return games
 
