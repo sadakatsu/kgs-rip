@@ -3,6 +3,7 @@ import sqlite3
 import sys
 
 from add_game import add_game
+
 from add_user import add_user
 from count_games import count_games
 from get_games import get_games
@@ -32,7 +33,7 @@ def main(connection: Connection):
                     break
                 print(f'Looking for {user} in {year}-{month}...')
 
-                games = get_games(user, year, month)
+                games = reversed(get_games(user, year, month))
                 for game in games:
                     add_user(connection, game.black)
                     add_user(connection, game.white)
@@ -42,6 +43,10 @@ def main(connection: Connection):
 
                 update_user_progress(connection, user, year, month)
 
+                cursor = connection.cursor()
+                cursor.execute('select count(*) from games')
+                count = cursor.fetchone()[0]
+                print(f'Finished {year}-{month}.  There are now {count} games.\n')
                 print()
 
         count = count_games(connection, user)
@@ -62,11 +67,15 @@ def main(connection: Connection):
 
 
 if __name__ == '__main__':
-    initial_user = sys.argv[1].strip()
+    if len(sys.argv) > 1:
+        initial_user = sys.argv[1].strip()
+    else:
+        initial_user = None
 
     try:
         with sqlite3.connect('kgs.db') as connection:
-            add_user(connection, initial_user)
+            if initial_user:
+                add_user(connection, initial_user)
             main(connection)
     finally:
         pass

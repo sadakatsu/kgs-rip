@@ -1,0 +1,66 @@
+plugins {
+	id 'org.springframework.boot' version '2.4.3'
+	id 'io.spring.dependency-management' version '1.0.11.RELEASE'
+	id 'java'
+	id 'io.freefair.lombok' version '5.2.1'
+	id 'jacoco'
+}
+
+group = 'com.sadakatsu'
+version = '0.0.1'
+sourceCompatibility = '14'
+targetCompatibility = '14'
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+repositories {
+	mavenCentral()
+	jcenter()
+}
+
+dependencies {
+	// COMPILATION DEPENDENCIES
+	implementation 'com.google.guava:guava:30.1.1-jre'
+
+	// https://mvnrepository.com/artifact/net.sourceforge.htmlcleaner/htmlcleaner
+	implementation 'net.sourceforge.htmlcleaner:htmlcleaner:2.24'
+
+	implementation 'org.apache.commons:commons-collections4:4.4'
+	implementation 'org.apache.commons:commons-lang3:3.12.0'
+	implementation 'org.apache.commons:commons-text:1.9'
+
+	implementation 'org.flywaydb:flyway-core:7.7.1'
+
+	// https://mvnrepository.com/artifact/org.hibernate/hibernate-java8
+	implementation 'org.hibernate:hibernate-java8:5.4.31.Final'
+
+
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+
+	implementation 'javax.validation:validation-api:2.0.1.Final'
+	implementation 'javax.xml:jaxp-api:1.4.2'
+
+
+	// RUNTIME DEPENDENCIES
+	runtime group: 'com.fasterxml.jackson.module', name: 'jackson-modules-java8', version: '2.11.3', ext: 'pom'
+	runtimeOnly 'mysql:mysql-connector-java'
+
+	// TEST DEPENDENCIES
+	testImplementation('org.springframework.boot:spring-boot-starter-test') {
+		exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
+	}
+}
+
+test {
+	useJUnitPlatform()
+	finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+	dependsOn test
+}

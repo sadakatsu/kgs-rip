@@ -2,8 +2,10 @@ import os
 import re
 import requests
 import sys
+import time
 
 from get_games import Game
+from requests.exceptions import ConnectionError
 from sqlite3 import Connection
 
 
@@ -16,7 +18,21 @@ def add_game(connection: Connection, game: Game):
             result = cursor.fetchall()
             if not result:
                 print(f'Found new game!  Downloading {game.id} ...')
-                sgf = requests.get(game.id, allow_redirects=True)
+
+                sgf = None
+                failures = 0
+                while not sgf:
+                    try:
+                        sgf = requests.get(game.id, allow_redirects=True)
+                        if sgf.ok:
+                            print('Downloaded SGF.')
+                        else:
+                            print(f'Could not download SGF: {sgf.status_code} - {sgf.reason}\n')
+                            return
+                    except (TimeoutError, ConnectionError):
+                        print('SGF DOWNLOAD FAILED; SLEEPING BEFORE ATTEMPTING AGAIN')
+                        failures += 1
+                        time.sleep(0.5 * failures)
 
                 match = re.match(
                     r'http://files.gokgs.com/games/(?P<year>\d+)/(?P<month>\d+)/(?P<day>\d+)/(?P<name>.*)\.sgf',
@@ -54,9 +70,10 @@ def add_game(connection: Connection, game: Game):
                     [game.id, game.white, game.black, game.setup, game.start_time, game.game_type, game.result]
                 )
 
-                cursor.execute('select count(*) from games')
-                count = cursor.fetchone()[0]
-                print(f'Game saved.  There are now {count} games.')
+                # cursor.execute('select count(*) from games')
+                # count = cursor.fetchone()[0]
+                # print(f'Game saved.  There are now {count} games.\n')
+                print('Game saved.\n')
 
             cursor.close()
     finally:

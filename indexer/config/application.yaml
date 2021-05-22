@@ -1,0 +1,28 @@
+indexer:
+  clean_database: false
+  ingest:
+    end_date: 2021-05-01T00:00:00Z
+    start_date: 1999-01-01T00:00:00Z
+    threads: 32
+    url: "http://www.gokgs.com/gameArchives.jsp?user=%s&oldAccounts=y&year=%s&month=%s&wut=%s"
+
+flyway:
+  defaultSchema: kgs-indexer
+
+logging:
+  level:
+    com.sadakatsu: INFO
+
+server:
+  port: 9000
+
+spring:
+  datasource:
+    url: XXXX
+    username: XXXX
+    password: XXXX
+  jpa:
+    hibernate:
+      ddl-auto: update
+  profiles:
+    active: ingest
