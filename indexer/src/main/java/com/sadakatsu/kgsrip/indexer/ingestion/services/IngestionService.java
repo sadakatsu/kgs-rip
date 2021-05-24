@@ -1,13 +1,15 @@
 package com.sadakatsu.kgsrip.indexer.ingestion.services;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.sadakatsu.kgsrip.indexer.domain.Game;
 import com.sadakatsu.kgsrip.indexer.domain.User;
+import com.sadakatsu.kgsrip.indexer.ingestion.domain.IngestionStatus;
+import com.sadakatsu.kgsrip.indexer.ingestion.domain.WorkerStatus;
 import com.sadakatsu.kgsrip.indexer.repositories.GameRepository;
 import com.sadakatsu.kgsrip.indexer.repositories.UserRepository;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.htmlcleaner.CleanerProperties;
 import org.htmlcleaner.DomSerializer;
@@ -42,6 +44,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Profile("ingest")
@@ -60,6 +63,7 @@ public class IngestionService implements DisposableBean {
     private final ZonedDateTime startDate;
     private final GameRepository gameRepository;
     private final HtmlCleaner cleaner;
+    private final Map<String, WorkerStatus> tracker;
     private final Pattern gameTimestampRegex;
     private final Pattern playerRankRegex;
     private final PlatformTransactionManager transactionManager;
@@ -97,6 +101,7 @@ public class IngestionService implements DisposableBean {
         this.reservations = Sets.newConcurrentHashSet();
         this.run = new AtomicBoolean(false);
         this.startDate = startDate;
+        this.tracker = Maps.newConcurrentMap();
         this.transactionManager = transactionManager;
         this.urlFormat = urlFormat;
         this.userRepository = userRepository;
@@ -149,8 +154,9 @@ public class IngestionService implements DisposableBean {
 
             while (!Thread.interrupted()) {
                 try {
+                    boolean active;
                     Optional<User> reservation;
-                    if (run.get() && (reservation = reserve()).isPresent()) {
+                    if ((active = run.get()) && (reservation = reserve()).isPresent()) {
                         var user = reservation.get();
                         final var id = user.getId();
                         final var username = user.getName();
@@ -167,7 +173,11 @@ public class IngestionService implements DisposableBean {
                             final var url = composeUrl(username, year, month);
                             final var document = loadArchivePageFailFast(url);
                             if (document != null) {
+                                final var status = WorkerStatus.getRunning(username, year, month);
+                                tracker.put(threadName, status);
+
                                 var truncated = false;
+
                                 if (hasGames(document)) {
                                     final var gameRows = getGameRows(document);
                                     for (
@@ -302,9 +312,9 @@ public class IngestionService implements DisposableBean {
                                         month
                                     );
                                 }
-                            }
-
-                            if (document == null) {
+                            } else {
+                                final var status = WorkerStatus.getSleeping503(username, year, month);
+                                tracker.put(threadName, status);
                                 sleepRandomDuration();
                             }
                         }
@@ -318,12 +328,22 @@ public class IngestionService implements DisposableBean {
                             username
                         );
                     } else {
+                        final var status = (
+                            active ?
+                                WorkerStatus.getSleepingNoUser() :
+                                WorkerStatus.getPaused()
+                        );
+                        tracker.put(threadName, status);
                         sleepRandomDuration();
                     }
                 } catch (InterruptedException e) {
                     log.info("Received an InterruptedException.", e);
                 }
             }
+
+            final var status = WorkerStatus.getStopped();
+            tracker.put(threadName, status);
+
             log.info("Thread {} has completed.", Thread.currentThread().getName());
         };
     }
@@ -645,5 +665,32 @@ public class IngestionService implements DisposableBean {
         }
 
         return url;
+    }
+
+    public IngestionStatus getStatus() {
+        // Developer's Note: (J. Craig, 2021-05-24)
+        // This method is intentionally not thread-safe.  It does not guarantee exact results.  It returns an
+        // approximate snapshot of the current work so the user can get a sense for what is happening.
+        final var notStarted = userRepository.countByIndexedIsNull();
+        final var inProgress = userRepository.countByIndexedIsNotNullAndIndexedLessThan(endDate);
+        final var completed = userRepository.countByIndexedIsNotNullAndIndexedGreaterThanEqual(endDate);
+        final var total = userRepository.count();
+
+        final var gameCount = gameRepository.count();
+
+        final Map<String, WorkerStatus> workerStatuses = Maps.newLinkedHashMap();
+        tracker.entrySet()
+            .stream()
+            .sorted(Map.Entry.comparingByKey())
+            .forEach(entry -> workerStatuses.put(entry.getKey(), entry.getValue()));
+
+        return IngestionStatus.builder()
+            .userNotStartedCount(notStarted)
+            .userInProgressCount(inProgress)
+            .userCompletedCount(completed)
+            .userTotalCount(total)
+            .gameCount(gameCount)
+            .workerStatuses(workerStatuses)
+            .build();
     }
 }

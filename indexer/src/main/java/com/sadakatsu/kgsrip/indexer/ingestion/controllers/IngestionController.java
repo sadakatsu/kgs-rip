@@ -1,5 +1,6 @@
 package com.sadakatsu.kgsrip.indexer.ingestion.controllers;
 
+import com.sadakatsu.kgsrip.indexer.ingestion.domain.IngestionStatus;
 import com.sadakatsu.kgsrip.indexer.ingestion.services.IngestionService;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
@@ -29,5 +30,11 @@ public class IngestionController {
     public ResponseEntity<Void> pause() {
         ingestionService.pauseIngestion();
         return ResponseEntity.of(Optional.empty());
+    }
+
+    @GetMapping
+    public ResponseEntity<IngestionStatus> checkStatus() {
+        final var status = ingestionService.getStatus();
+        return ResponseEntity.ok(status);
     }
 }
