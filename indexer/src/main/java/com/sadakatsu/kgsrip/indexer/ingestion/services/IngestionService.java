@@ -44,7 +44,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Profile("ingest")
@@ -160,7 +159,7 @@ public class IngestionService implements DisposableBean {
                         var user = reservation.get();
                         final var id = user.getId();
                         final var username = user.getName();
-                        log.info("Thread {} reserved User {} ( {} ).", threadName, id, username);
+                        log.debug("Thread {} reserved User {} ( {} ).", threadName, id, username);
 
                         var done = false;
                         while (
@@ -196,7 +195,7 @@ public class IngestionService implements DisposableBean {
                                         final var allBlack = getPlayers(row, blackExpression);
 
                                         if (allWhite.size() != 1 || allBlack.size() != 1) {
-                                            log.info(
+                                            log.debug(
                                                 "Thread {} found a {} game on {} with {} total players.  Skipping.",
                                                 threadName,
                                                 type,
@@ -207,7 +206,7 @@ public class IngestionService implements DisposableBean {
                                         }
 
                                         if (!isAcceptableType(type)) {
-                                            log.info(
+                                            log.debug(
                                                 "Thread {} found a {} game on {}.  Skipping.",
                                                 threadName,
                                                 type,
@@ -218,7 +217,7 @@ public class IngestionService implements DisposableBean {
 
                                         final var setup = getGameSetup(row);
                                         if (!setup.startsWith("19")) {
-                                            log.info(
+                                            log.debug(
                                                 "Thread {} found a {} game on {}.  Skipping.",
                                                 threadName,
                                                 setup,
@@ -229,7 +228,7 @@ public class IngestionService implements DisposableBean {
 
                                         final var result = getGameResult(row);
                                         if (!(result.startsWith("B+") || result.startsWith("W+"))) {
-                                            log.info(
+                                            log.debug(
                                                 "Thread {} found a {} game on {}.  Skipping.",
                                                 threadName,
                                                 result,
@@ -270,12 +269,13 @@ public class IngestionService implements DisposableBean {
                                             try {
                                                 gameRepository.save(game);
                                                 log.info(
-                                                    "Thread {} discovered a new Game {} - {} with {} at {}!",
-                                                    threadName,
+                                                    "GAME: {} / {} / {} / {} / {} / {}",
                                                     whiteUser.getName(),
                                                     blackUser.getName(),
                                                     setup,
-                                                    timestamp
+                                                    timestamp,
+                                                    type,
+                                                    result
                                                 );
                                             } catch (org.springframework.dao.DataIntegrityViolationException e) {
                                                 // Developer's Note: (J. Craig, 2021-05-23)
@@ -294,7 +294,7 @@ public class IngestionService implements DisposableBean {
                                 if (!truncated) {
                                     user.setIndexed(nextDate);
                                     userRepository.save(user);
-                                    log.info(
+                                    log.debug(
                                         "Thread {} completed User {} ( {} ) for {}-{}.",
                                         threadName,
                                         id,
@@ -303,7 +303,7 @@ public class IngestionService implements DisposableBean {
                                         month
                                     );
                                 } else {
-                                    log.info(
+                                    log.debug(
                                         "Thread {} was interrupted for User {} ( {} ) for {}-{}.",
                                         threadName,
                                         id,
@@ -320,7 +320,7 @@ public class IngestionService implements DisposableBean {
                         }
 
                         reservations.remove(id);
-                        log.info(
+                        log.debug(
                             "Thread {} {} User {} ( {} ).",
                             threadName,
                             done ? "completed" : "released",
@@ -337,14 +337,14 @@ public class IngestionService implements DisposableBean {
                         sleepRandomDuration();
                     }
                 } catch (InterruptedException e) {
-                    log.info("Received an InterruptedException.", e);
+                    log.debug("Received an InterruptedException.", e);
                 }
             }
 
             final var status = WorkerStatus.getStopped();
             tracker.put(threadName, status);
 
-            log.info("Thread {} has completed.", Thread.currentThread().getName());
+            log.debug("Thread {} has completed.", Thread.currentThread().getName());
         };
     }
 
@@ -364,29 +364,29 @@ public class IngestionService implements DisposableBean {
 
         final var thread = Thread.currentThread();
         final var name = thread.getName();
-        log.info("Thread {} attempting to reserve a user...", name);
+        log.debug("Thread {} attempting to reserve a user...", name);
 
-        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        final var template = new TransactionTemplate(transactionManager);
         template.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
         template.setReadOnly(true);
 
         found = template.execute(
             status -> {
                 try (Stream<User> stream = userRepository.findByIndexedIsNullOrIndexedLessThan(endDate)) {
-                    return stream.filter(this::_attemptToReserve)
+                    return stream.filter(this::attemptToReserve)
                         .findFirst();
                 }
             }
         );
 
         if (found.isEmpty()) {
-            log.info("Thread {} found no user to reserve.", name);
+            log.debug("Thread {} found no user to reserve.", name);
         }
 
         return found;
     }
 
-    private boolean _attemptToReserve(User user) {
+    private boolean attemptToReserve(User user) {
         final var id = user.getId();
         return reservations.add(id);
     }
@@ -598,11 +598,7 @@ public class IngestionService implements DisposableBean {
                         .name(username)
                         .build();
                     user = userRepository.save(candidate);
-                    log.info(
-                        "Thread {} found new user {}!",
-                        Thread.currentThread().getName(),
-                        username
-                    );
+                    log.info("USER: {}", username);
                 }
             } catch (RuntimeException e) {
                 // Developer's Note: (J. Craig, 2021-05-23)
@@ -671,12 +667,12 @@ public class IngestionService implements DisposableBean {
         // Developer's Note: (J. Craig, 2021-05-24)
         // This method is intentionally not thread-safe.  It does not guarantee exact results.  It returns an
         // approximate snapshot of the current work so the user can get a sense for what is happening.
-        final var notStarted = userRepository.countByIndexedIsNull();
         final var inProgress = userRepository.countByIndexedIsNotNullAndIndexedLessThan(endDate);
         final var completed = userRepository.countByIndexedIsNotNullAndIndexedGreaterThanEqual(endDate);
-        final var total = userRepository.count();
+        final var total = userRepository.guessCount();
+        final var notStarted = total - inProgress - completed;
 
-        final var gameCount = gameRepository.count();
+        final var gameCount = gameRepository.guessCount();
 
         final Map<String, WorkerStatus> workerStatuses = Maps.newLinkedHashMap();
         tracker.entrySet()
